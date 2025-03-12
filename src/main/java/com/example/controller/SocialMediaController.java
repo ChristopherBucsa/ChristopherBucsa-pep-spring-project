@@ -40,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
  * as a controller that can handle HTTP requests and serialize the return value
  * of methods into JSON format.
  */
+
 @RestController 
 public class SocialMediaController {
 
@@ -190,10 +191,13 @@ public class SocialMediaController {
 
     
      //We now need a method to retrieve all message written by a particular user
-     @GetMapping("/accounts/{accountId}")
-     public ResponseEntity<List<Message>> retrieveMessagesFromUser(@PathVariable int accountId){
-        List<Message> accountMessages = messageRepository.findPostedBy(accountId);
+     @GetMapping("/accounts/{accountId}/messages")
+     public ResponseEntity<List<Message>> retrieveMessagesFromUser(@PathVariable int accountId) {
+        List<Message> accountMessages = messageRepository.findByPostedBy(accountId);
+        if (accountMessages == null) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
         return new ResponseEntity<>(accountMessages, HttpStatus.OK);
-     }
+    }
 
 }
