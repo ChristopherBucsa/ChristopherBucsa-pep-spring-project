@@ -1,14 +1,23 @@
 package com.example.controller;
-
 import com.example.service.AccountService;
+import com.example.service.MessageService;
+
+import java.util.*;
+
 import com.example.entity.Account;
+import com.example.entity.Message;
 import com.example.exception.DuplicateUsernameException;
 import com.example.exception.InvalidCredentialsException;
 import com.example.repository.AccountRepository;
+import com.example.repository.MessageRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,6 +45,8 @@ public class SocialMediaController {
 
     private AccountService accountService; //Reference to accountService
     private AccountRepository accountRepository;
+    private MessageService messageService;
+    private MessageRepository messageRepository;
 
     /**
      * Allow Spring to inject an instance of the AccountService class
@@ -47,8 +58,11 @@ public class SocialMediaController {
      * @param accountService
      */
     @Autowired
-    public SocialMediaController(AccountService accountService){
+    public SocialMediaController(AccountService accountService, MessageService messageService, MessageRepository messageRepository, AccountRepository accountRepository) {
         this.accountService = accountService;
+        this.messageService = messageService;
+        this.messageRepository = messageRepository;
+        this.accountRepository = accountRepository; 
     }
 
     /**
@@ -61,16 +75,16 @@ public class SocialMediaController {
      * convert it to an account object.
      */
     @PostMapping("/register")
-    public ResponseEntity<String> registerAccount(@RequestBody Account account){
+    public ResponseEntity<Account> registerAccount(@RequestBody Account account){
         try{
             accountService.addAccount(account);
-            return new ResponseEntity<>("Account successfully created.", HttpStatus.OK);
+            return new ResponseEntity<>(account, HttpStatus.OK);
         } 
         catch (DuplicateUsernameException e){
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.CONFLICT);
+            return new ResponseEntity<>(account, HttpStatus.CONFLICT);
         }    
         catch(InvalidCredentialsException e){
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+            return new ResponseEntity<>(account, HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -89,5 +103,97 @@ public class SocialMediaController {
         else{
             return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
         }
-    }     
+    }  
+    
+    /**
+     * Here, we will define the endpoint for submitting a new post.
+     * It will be on the endpoint /messages.  The request body will contain
+     * a JSON representation of a message, which will be persisted to the database
+     * if the requirements are fulfilled - but will not contain a messageID. 
+     */
+    @PostMapping("/messages")
+    public ResponseEntity<Message> submitMessage(@RequestBody Message message) {
+        if (messageService.meetsRequirements(message.getMessageText()) && messageService.postedByCheck(message)) {
+            messageRepository.save(message); 
+            return new ResponseEntity<>(message, HttpStatus.OK);
+        } 
+        else{ 
+        return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    /**
+     * We now need a method to retrieve all the messages from the database  
+     * The response body will contain a JSON representation of a list containing all messages
+     * retrieved from the database. If there are no messages, then the
+     * list will be empty.
+     */
+    @GetMapping("/messages")
+    public ResponseEntity<List<Message>> retrieveMessages(){
+        List<Message> retrievedMessages = messageRepository.findAll(); //find all method of jpa repository returns a list
+        return new ResponseEntity<>(retrievedMessages, HttpStatus.OK);
+    }
+
+    /**
+     * Now we need a method to retrieve a message by its given messageID,
+     * which is the primary key of the message table. It will be a Get
+     * request at the endpoint /messages/{messageId}
+     */
+   @GetMapping("/messages/{messageId}")
+    public ResponseEntity<Message> retrieveMessageById(@PathVariable int messageId) {
+    Optional<Message> message = messageRepository.findById(messageId); //findById may or may not contain a null value of type Optional
+    return message.map(msg -> new ResponseEntity<>(msg, HttpStatus.OK)).orElseGet(() -> new ResponseEntity<>(HttpStatus.OK)); // Empty body, 200 OK
+    }
+
+    /**
+     * Now, we need a way for a user to delete a message given by its
+     * messageId.  The deleteion of an existing message will remove it from the 
+     * database and the response body will contain the number of rows
+     * updated in the message table. If the messageId does not exist
+     * the response body will be empty.
+     */
+    @DeleteMapping("/messages/{messageId}")
+    public ResponseEntity<String> deleteMessageById(@PathVariable int messageId){
+        if(messageRepository.existsById(messageId)){
+            messageRepository.deleteById(messageId);
+            return new ResponseEntity<>("1 row deleted from database", HttpStatus.OK);
+        }
+        else{
+            return new ResponseEntity<>(HttpStatus.OK);
+        }
+    }
+
+    /**
+     * Next, we need the API to be able to update a message object's
+     * "messageText" identified by a message Id.  Request body should
+     * contain a new messageText values to replace the message identified
+     * by the messageId.  The request body can not be guaranteed to contain
+     * any other information
+     */
+    @PatchMapping("/messages/{messageId}")
+    public ResponseEntity<Integer> updateMessage(@PathVariable int messageId, @RequestBody Map<String, String> body){ 
+        String newText = body.get("messageText");
+        if(newText == null || newText.isBlank() || newText.length() > 255){
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        Optional<Message> optionalMessage = messageRepository.findById(messageId);
+        if(optionalMessage.isEmpty()){
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        Message existingMessage = optionalMessage.get();
+        existingMessage.setMessageText(newText);
+        messageRepository.save(existingMessage);
+        return new ResponseEntity<>(1, HttpStatus.OK);
+    }
+
+    
+     //We now need a method to retrieve all message written by a particular user
+     @GetMapping("/accounts/{accountId}")
+     public ResponseEntity<List<Message>> retrieveMessagesFromUser(@PathVariable int accountId){
+        List<Message> accountMessages = messageRepository.findPostedBy(accountId);
+        return new ResponseEntity<>(accountMessages, HttpStatus.OK);
+     }
+
 }

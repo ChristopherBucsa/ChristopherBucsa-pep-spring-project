@@ -1,5 +1,6 @@
 package com.example.repository;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import com.example.entity.Account;
 
@@ -10,7 +11,7 @@ import com.example.entity.Account;
  * only the definition of methods need to be added, but since we're leveraging
  * Spring, we have access to many methods that will automatically be implemented.
  */
-
+@Repository
 public interface AccountRepository extends JpaRepository<Account, Integer> { //"Account" let's the JpaRepository know what entity this class is dealing with, and Integer is the primary key type
 
     /**
@@ -30,7 +31,7 @@ public interface AccountRepository extends JpaRepository<Account, Integer> { //"
       /**
        * We need a method in the repository to see if a username and passwrod
        * already exists in the database, not just the username.  This is mainly for
-       * the "log-in feature. 
+       * the "log-in" feature. 
        */
       public Account findByUsernameAndPassword(String username, String password);
 }
